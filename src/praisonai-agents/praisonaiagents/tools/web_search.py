@@ -86,14 +86,11 @@ def _check_searxng() -> tuple[bool, Optional[str]]:
 def _check_parallel() -> tuple[bool, Optional[str]]:
     """Check if compatible Streamable HTTP MCP support is installed."""
     try:
-        from praisonaiagents.mcp.mcp_http_stream import streamablehttp_client
+        from praisonaiagents.mcp.mcp_http_stream import streamable_http_client
     except ImportError:
-        streamablehttp_client = None
-    if streamablehttp_client is None:
+        streamable_http_client = None
+    if streamable_http_client is None:
         return False, "install praisonaiagents[parallel-search] for Streamable HTTP MCP support"
-    from inspect import signature
-    if "httpx_client_factory" not in signature(streamablehttp_client).parameters:
-        return False, "install praisonaiagents[parallel-search] for bounded Streamable HTTP support"
     return True, None
 
 def _truncate_parallel_text(value: Any, limit: int) -> str:

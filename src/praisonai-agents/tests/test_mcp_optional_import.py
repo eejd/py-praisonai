@@ -128,10 +128,10 @@ class TestMCPOptionalImport:
 
         # Ensure MCP is available but the official streamable client is not
         original_available = http_module.MCP_AVAILABLE
-        original_client = http_module.streamablehttp_client
+        original_client = http_module.streamable_http_client
 
         http_module.MCP_AVAILABLE = True
-        http_module.streamablehttp_client = None
+        http_module.streamable_http_client = None
 
         try:
             from praisonaiagents.mcp.mcp_http_stream import HTTPStreamMCPClient
@@ -142,7 +142,7 @@ class TestMCPOptionalImport:
             assert 'streamable' in error_msg.lower()
         finally:
             http_module.MCP_AVAILABLE = original_available
-            http_module.streamablehttp_client = original_client
+            http_module.streamable_http_client = original_client
 
 
 if __name__ == "__main__":

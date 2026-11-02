@@ -17,6 +17,7 @@ Usage:
 
 import asyncio
 import inspect
+import sys
 from praisonaiagents._logging import get_logger
 from typing import Any, Callable, Dict, List, Optional
 
@@ -174,13 +175,13 @@ class ToolsMCPServer:
             Configured FastMCP instance
         """
         try:
-            from mcp.server.fastmcp import FastMCP
+            from mcp.server.mcpserver import MCPServer
         except ImportError:
             raise ImportError(
-                "FastMCP not available. Install with: pip install mcp"
+                "MCPServer not available. Install with: pip install 'mcp>=2.3'"
             )
-        
-        mcp = FastMCP(self.name)
+
+        mcp = MCPServer(self.name)
         
         # Register each tool with FastMCP
         for func in self.tools:
@@ -202,39 +203,29 @@ class ToolsMCPServer:
             docstring = inspect.getdoc(func)
             description = docstring.split('\n')[0] if docstring else tool_name
         
-        # Create wrapper that preserves signature
-        if asyncio.iscoroutinefunction(func):
-            @mcp.tool(name=tool_name, description=description)
-            async def tool_wrapper(**kwargs):
-                return await func(**kwargs)
-        else:
-            @mcp.tool(name=tool_name, description=description)
-            def tool_wrapper(**kwargs):
-                return func(**kwargs)
-        
-        # Copy signature for proper schema generation
-        tool_wrapper.__signature__ = inspect.signature(func)
-        tool_wrapper.__annotations__ = getattr(func, '__annotations__', {})
+        mcp.tool(name=tool_name, description=description)(func)
     
     def run(self, transport: str = "stdio") -> None:
         """Run the MCP server.
         
         Args:
-            transport: Transport type - "stdio" or "sse"
+            transport: Transport type - "stdio", "sse" or "streamable-http"
         """
         if transport == "stdio":
             self.run_stdio()
         elif transport == "sse":
             self.run_sse()
+        elif transport == "streamable-http":
+            self.get_fastmcp().run(transport="streamable-http")
         else:
-            raise ValueError(f"Unknown transport: {transport}. Use 'stdio' or 'sse'")
+            raise ValueError(f"Unknown transport: {transport}. Use 'stdio', 'sse' or 'streamable-http'")
     
     def run_stdio(self) -> None:
         """Run the MCP server using stdio transport."""
         mcp = self.get_fastmcp()
         
-        print(f"🚀 Starting MCP server '{self.name}' with stdio transport")
-        print(f"🛠️  Available tools: {', '.join(self.get_tool_names())}")
+        print(f"Starting MCP server '{self.name}' with stdio transport", file=sys.stderr)
+        print(f"Available tools: {', '.join(self.get_tool_names())}", file=sys.stderr)
         
         mcp.run()
     
@@ -310,10 +301,10 @@ class ToolsMCPServer:
             async with sse_transport.connect_sse(
                 request.scope, request.receive, request._send
             ) as (read_stream, write_stream):
-                await mcp._mcp_server.run(
+                await mcp._lowlevel_server.run(
                     read_stream,
                     write_stream,
-                    mcp._mcp_server.create_initialization_options()
+                    mcp._lowlevel_server.create_initialization_options()
                 )
         
         app = Starlette(

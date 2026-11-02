@@ -17,14 +17,14 @@ from typing import List, Dict, Any, Optional, Callable, Iterable, Union
 try:
     from mcp import ClientSession
     try:
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
     except ImportError:
-        streamablehttp_client = None
+        streamable_http_client = None
     MCP_AVAILABLE = True
 except ImportError:
     MCP_AVAILABLE = False
     ClientSession = None
-    streamablehttp_client = None
+    streamable_http_client = None
 
 try:
     import aiohttp
@@ -72,7 +72,7 @@ def _register_cleanup():
         _cleanup_registered = True
 
 def _bounded_httpx_client_factory(max_response_bytes):
-    import httpx
+    import httpx2 as httpx
 
     class BoundedStream(httpx.AsyncByteStream):
         def __init__(self, stream):
@@ -503,18 +503,11 @@ class HTTPStreamMCPClient:
                 "Install it with: pip install praisonaiagents[mcp]"
             )
 
-        # The official streamablehttp_client (httpx-based) is required for the
-        # Streamable HTTP transport.
-        if streamablehttp_client is None:
-            raise ImportError(
-                "The installed 'mcp' package does not provide the Streamable HTTP "
-                "client (mcp.client.streamable_http.streamablehttp_client). "
-                "This transport was removed in mcp 2.x; install a compatible "
-                "version with: pip install \"mcp<2\""
-            )
+        if streamable_http_client is None:
+            raise ImportError("Streamable HTTP requires mcp 2.x")
 
         # Use the server URL exactly as provided. The official
-        # streamablehttp_client posts to this URL directly, so silently
+        # streamable_http_client posts to this URL directly, so silently
         # rewriting a bare-host URL (e.g. appending '/mcp') would POST to a
         # non-existent endpoint, yielding HTTP 404 which the SDK surfaces as
         # "Session terminated" during initialize().
@@ -572,32 +565,30 @@ class HTTPStreamMCPClient:
         # write streams are proper anyio memory-object streams that ClientSession
         # can drive. A hand-rolled transport would pass a plain function where the
         # SDK expects a stream with .send()/.receive(), breaking session.initialize().
-        if streamablehttp_client is None:
-            raise ImportError(
-                "The installed 'mcp' package does not provide "
-                "mcp.client.streamable_http.streamablehttp_client. "
-                "This transport was removed in mcp 2.x; install a compatible "
-                "version with: pip install \"mcp<2\""
-            )
+        if streamable_http_client is None:
+            raise ImportError("Streamable HTTP requires mcp 2.x")
+
+        import httpx2
 
         headers = self.options.get('headers') or None
-
-        client_options = {
-            "url": self.base_url,
-            "headers": headers,
-            "timeout": self.timeout,
-        }
         if self.max_response_bytes is not None:
-            client_options["httpx_client_factory"] = _bounded_httpx_client_factory(
+            self._http_client = _bounded_httpx_client_factory(
                 self.max_response_bytes
+            )(headers=headers, timeout=httpx2.Timeout(self.timeout))
+        else:
+            self._http_client = httpx2.AsyncClient(
+                headers=headers, timeout=httpx2.Timeout(self.timeout),
+                follow_redirects=True,
             )
-        self._streams_context = streamablehttp_client(**client_options)
+        self._streams_context = streamable_http_client(
+            self.base_url, http_client=self._http_client
+        )
 
         # If any step of the handshake fails after a context has been entered,
         # unwind the already-entered contexts so we don't leak the httpx/anyio
         # connection or a half-open remote MCP session.
         try:
-            read_stream, write_stream, _ = await self._streams_context.__aenter__()
+            read_stream, write_stream = await self._streams_context.__aenter__()
 
             # Create client session
             self._session_context = ClientSession(read_stream, write_stream)
@@ -664,6 +655,11 @@ class HTTPStreamMCPClient:
             except Exception:
                 pass
             self._streams_context = None
+
+        http_client = getattr(self, '_http_client', None)
+        if http_client is not None:
+            await http_client.aclose()
+            self._http_client = None
 
     async def aclose(self):
         """Async cleanup method to close all resources."""
