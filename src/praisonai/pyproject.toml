@@ -21,9 +21,9 @@ dependencies = [
     "praisonai-sandbox>=0.1.19",
     "praisonai-deploy>=0.1.19",
     "python-dotenv>=0.19.0",
-    "litellm>=1.83.14,<1.106",  # 1.106 imports mcp.types.CacheableResult (mcp>=2.2); we pin mcp<2
+    "litellm>=1.106.4",
     "PyYAML>=6.0",
-    "mcp>=1.20.0,<2",
+    "mcp>=2.3.0",
     "typer>=0.12.0",
     "click>=8.4.2",
     "textual>=0.47.0",
